@@ -56,6 +56,12 @@ func (ms *ModelSuite) Test_Task_Title_TooLong_Invalid() {
 	ms.NotEmpty(verrs.Get("title"))
 }
 
+func (ms *ModelSuite) Test_Tasks_PendingCount() {
+	ms.Equal(0, Tasks{}.PendingCount())
+	ms.Equal(2, Tasks{{Completed: false}, {Completed: true}, {Completed: false}}.PendingCount())
+	ms.Equal(0, Tasks{{Completed: true}}.PendingCount())
+}
+
 func (ms *ModelSuite) Test_Task_Toggle_Persists() {
 	task := &Task{Title: "Revisar el correo"}
 	verrs, err := ms.DB.ValidateAndCreate(task)

@@ -28,6 +28,76 @@ func (as *ActionSuite) Test_TasksIndex_ListsTasks() {
 	as.Contains(body, "Completada")
 }
 
+const pendingP = `<p class="list-count pending-count">`
+
+func (as *ActionSuite) createTask(title string, completed bool) *models.Task {
+	task := &models.Task{Title: title, Completed: completed}
+	verrs, err := as.DB.ValidateAndCreate(task)
+	as.NoError(err)
+	as.False(verrs.HasAny())
+	return task
+}
+
+func (as *ActionSuite) assertPendingText(text string) {
+	res := as.HTML("/").Get()
+	as.Equal(200, res.Code)
+	as.Contains(res.Body.String(), pendingP+text+"</p>")
+}
+
+func (as *ActionSuite) Test_TasksIndex_PendingCount_Plural() {
+	as.LoadFixture("tres tareas")
+
+	as.assertPendingText("2 tareas pendientes")
+}
+
+func (as *ActionSuite) Test_TasksIndex_PendingCount_Singular() {
+	as.createTask("Pendiente", false)
+	as.createTask("Hecha", true)
+
+	as.assertPendingText("1 tarea pendiente")
+}
+
+func (as *ActionSuite) Test_TasksIndex_PendingCount_NoneWithoutTasks() {
+	as.assertPendingText("No hay tareas pendientes")
+}
+
+func (as *ActionSuite) Test_TasksIndex_PendingCount_NoneAllCompleted() {
+	as.createTask("Hecha 1", true)
+	as.createTask("Hecha 2", true)
+
+	as.assertPendingText("No hay tareas pendientes")
+}
+
+func (as *ActionSuite) Test_TasksCreate_Invalid_ShowsPendingCount() {
+	as.LoadFixture("tres tareas")
+
+	res := as.HTML("/tasks").Post(&models.Task{Title: ""})
+	as.Equal(422, res.Code)
+	as.Contains(res.Body.String(), pendingP+"2 tareas pendientes</p>")
+}
+
+func (as *ActionSuite) Test_TasksIndex_PendingCount_UpdatesAfterMutations() {
+	as.Equal(303, as.HTML("/tasks").Post(&models.Task{Title: "A"}).Code)
+	as.assertPendingText("1 tarea pendiente")
+
+	as.Equal(303, as.HTML("/tasks").Post(&models.Task{Title: "B"}).Code)
+	as.assertPendingText("2 tareas pendientes")
+
+	a := &models.Task{}
+	as.NoError(as.DB.Where("title = ?", "A").First(a))
+	b := &models.Task{}
+	as.NoError(as.DB.Where("title = ?", "B").First(b))
+
+	as.Equal(303, as.HTML("/tasks/%s/toggle", a.ID).Put(url.Values{}).Code)
+	as.assertPendingText("1 tarea pendiente")
+
+	as.Equal(303, as.HTML("/tasks/%s/toggle", a.ID).Put(url.Values{}).Code)
+	as.assertPendingText("2 tareas pendientes")
+
+	as.Equal(303, as.HTML("/tasks/%s", b.ID).Delete().Code)
+	as.assertPendingText("1 tarea pendiente")
+}
+
 func (as *ActionSuite) Test_TasksCreate_Valid() {
 	res := as.HTML("/tasks").Post(&models.Task{Title: "  Nueva tarea de prueba  "})
 	as.Equal(303, res.Code)
